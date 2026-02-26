@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PolyIntel — Polymarket Intelligence Dashboard</title>
+<title>RyojinPoly — Polymarket Intelligence Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -432,7 +432,7 @@ body {
 <div id="auth-gate" style="display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg-primary)">
   <div style="text-align:center;padding:40px;border-radius:20px;background:var(--bg-card);border:1px solid var(--border);backdrop-filter:blur(16px);width:360px">
     <div style="font-size:32px;margin-bottom:12px">🔒</div>
-    <h2 style="font-size:18px;font-weight:700;margin-bottom:4px"><span style="color:var(--accent)">Poly</span>Intel</h2>
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:4px"><span style="color:var(--accent)">Ryojin</span>Poly</h2>
     <p style="font-size:12px;color:var(--text-muted);margin-bottom:24px">Enter password to continue</p>
     <input id="auth-input" type="password" placeholder="Password" autofocus
       style="width:100%;padding:12px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);font-size:14px;font-family:inherit;text-align:center;letter-spacing:2px"
@@ -444,7 +444,7 @@ body {
 <div id="app" style="display:none"></div>
 
 <script>
-const AUTH_HASH = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918'; // sha256 of 'wagmi'
+const AUTH_HASH = 'c3b0d7cc90f61cfa970b11882d1f0cc002ed794ba31a10d9681561ac8a1dcab1'; // sha256 of 'wagmi'
 
 async function sha256(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -652,7 +652,7 @@ function render() {
     <!-- Header -->
     <div class="header">
       <div class="logo">
-        <h1><span>Poly</span>Intel</h1>
+        <h1><span>Ryojin</span>Poly</h1>
         <span class="subtitle">Polymarket Intelligence Dashboard</span>
       </div>
       <div class="header-actions">
