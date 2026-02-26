@@ -499,7 +499,7 @@ const state = {
   search: '',
   category: 'All',
   sort: 'volume24hr',
-  minEdge: 0,
+  minEdge: 30,
   arbData: null,
   selectedMarket: null,
   searchResults: null,
@@ -520,7 +520,7 @@ const COLUMN_CONFIG = [
   { key:'safePlays', title:'Safe Plays', emoji:'📊', desc:'High probability, consistent returns', color:'var(--green)' },
   { key:'closingSoon', title:'Closing Soon', emoji:'⏰', desc:'Ending within 48 hours', color:'var(--orange)' },
   { key:'trending', title:'Trending', emoji:'👀', desc:'Biggest price moves in 24h', color:'var(--blue)' },
-  { key:'whales', title:'Whale Moves', emoji:'🐋', desc:'Unusual volume activity', color:'var(--yellow)' },
+  { key:'newsLag', title:'News Lag', emoji:'📰', desc:'Stale prices near resolution — potential mispricing', color:'var(--red)' },
 ];
 
 // ── Helpers ─────────────────────────────────────────────
@@ -662,6 +662,7 @@ function render() {
         <button class="tab-btn ${state.tab==='board'?'active':''}" onclick="setTab('board')">${icons.grid} Board</button>
         <button class="tab-btn ${state.tab==='watchlist'?'active':''}" onclick="setTab('watchlist')">⭐ Watchlist <span class="count">${state.watchlist.size}</span></button>
         <button class="tab-btn ${state.tab==='trader'?'active':''}" onclick="setTab('trader')">📤 Trader <span class="count">${state.traderQueue.length}</span></button>
+        <a href="https://www.polysignal.xyz" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:8px;border:1px solid var(--border);color:var(--text-secondary);font-size:11px;font-weight:600;text-decoration:none;transition:all 0.2s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-secondary)'">📡 PolySignal</a>
         <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme">${isLight?'🌙':'☀️'}</button>
       </div>
     </div>
@@ -747,7 +748,7 @@ function getFilteredColumns() {
   if (state.search && state.search.length >= 2 && state.searchResults) {
     return {
       dontMiss: state.searchResults.slice(0, 50),
-      highRisk: [], safePlays: [], closingSoon: [], trending: [], whales: []
+      highRisk: [], safePlays: [], closingSoon: [], trending: [], newsLag: []
     };
   }
 

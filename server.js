@@ -91,14 +91,35 @@ function processEvents(events) {
       const change1d = m.oneDayPriceChange ?? null;
       const change1w = m.oneWeekPriceChange ?? null;
 
-      // Edge score: multi-factor mispricing signal
-      const oddsFactor = 1 - Math.abs(yes - 0.5) * 2; // peaks at 50/50
-      const volMomentum = vol > 0 ? Math.min(vol24 / (vol * 0.1 + 1), 1) : 0;
-      const liqScore = Math.min(Math.log10(Math.max(liq, 1)) / 7, 1);
+      // Hard quality gates — skip garbage markets
+      if (liq < 10000) continue;        // No liquidity = manipulation risk
+      if (vol24 < 1000) continue;       // Dead market
+      if (yes <= 0.05 || yes >= 0.95) continue;  // No upside / foregone conclusion
+
+      // Research-backed curation score (0-100)
+      // Weights: Prob deviation 30%, Liquidity 30%, Volume 20%, Time pressure 20%
+
+      // Probability deviation from 50% (sweet spot: 15-85% range)
+      const probDeviation = 1 - Math.abs(yes - 0.5) * 2;
+
+      // Liquidity score (log-scaled, $10k floor already applied)
+      const liqNorm = Math.min(Math.log10(liq / 10000) / 4, 1);
+
+      // Volume momentum (24h vol relative to total — fresh activity signal)
+      const volNorm = Math.min(Math.log10(Math.max(vol24, 1)) / 6, 1);
+
+      // Time pressure (markets resolving in 1-14 days score highest)
       const daysLeft = m.endDate ? Math.max(0, (new Date(m.endDate) - Date.now()) / 86400000) : 30;
-      const timePressure = yes > 0.1 && yes < 0.9 ? Math.min(1, 7 / (daysLeft + 1)) : 0;
-      const momentumScore = Math.min(Math.abs(change1d || 0) * 10, 1);
-      const edge = Math.round(((oddsFactor * 0.25) + (volMomentum * 0.25) + (liqScore * 0.2) + (timePressure * 0.2) + (momentumScore * 0.1)) * 1000) / 10;
+      const timePressure = daysLeft <= 1 ? 0.5 :   // too close, risky
+                           daysLeft <= 14 ? 1 :
+                           daysLeft <= 30 ? 0.7 :
+                           daysLeft <= 60 ? 0.4 : 0.1;
+
+      const edge = Math.round(
+        ((probDeviation * 0.30) + (liqNorm * 0.30) + (volNorm * 0.20) + (timePressure * 0.20)) * 100 * 10
+      ) / 10;
+
+      // News lag: stale price relative to resolution proximity
       const newsLag = (change1d !== null && Math.abs(change1d) < 0.005 && daysLeft < 3) ? 'HIGH' :
                       (change1d !== null && Math.abs(change1d) < 0.02 && daysLeft < 7) ? 'MEDIUM' : 'LOW';
 
@@ -146,40 +167,55 @@ function processEvents(events) {
 
 function categorizeColumns(markets) {
   const now = Date.now();
-  const h48 = 48 * 3600 * 1000;
 
+  // Don't Miss: High conviction — price in 20-80% range, strong liquidity, active volume, resolves ≤30 days
   const dontMiss = markets
-    .filter(m => m.yesPrice >= 0.55 && m.yesPrice <= 0.85 && m.volume24hr > 10000 && m.liquidity > 20000)
-    .sort((a, b) => b.volume24hr - a.volume24hr)
-    .slice(0, 25);
+    .filter(m => m.yesPrice >= 0.20 && m.yesPrice <= 0.80)
+    .filter(m => m.liquidity >= 25000)
+    .filter(m => m.volume24hr >= 5000)
+    .filter(m => m.daysLeft <= 30)
+    .sort((a, b) => b.edge - a.edge)
+    .slice(0, 20);
 
+  // High Risk High Reward: Near 50/50 but with real volume (genuine uncertainty)
   const highRisk = markets
-    .filter(m => (m.yesPrice >= 0.35 && m.yesPrice <= 0.55) || m.liquidity < 20000)
-    .filter(m => m.volume24hr > 1000)
+    .filter(m => m.yesPrice >= 0.35 && m.yesPrice <= 0.65)
+    .filter(m => m.volume24hr >= 2000)
+    .filter(m => m.liquidity >= 15000)
     .sort((a, b) => b.volume24hr - a.volume24hr)
-    .slice(0, 25);
+    .slice(0, 20);
 
+  // Safe Plays: High probability (>75% or <25%) with real liquidity — low risk yield
   const safePlays = markets
-    .filter(m => (m.yesPrice > 0.85 || m.yesPrice < 0.15) && m.volume24hr > 10000)
+    .filter(m => (m.yesPrice > 0.75 || m.yesPrice < 0.25))
+    .filter(m => m.liquidity >= 20000)
+    .filter(m => m.volume24hr >= 3000)
+    .filter(m => m.daysLeft <= 21)
     .sort((a, b) => b.volume24hr - a.volume24hr)
-    .slice(0, 25);
+    .slice(0, 20);
 
+  // Closing Soon: Resolving in ≤48h with meaningful liquidity (yield play)
   const closingSoon = markets
-    .filter(m => { const e = new Date(m.endDate).getTime(); return e > now && e - now <= h48; })
-    .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
-    .slice(0, 25);
+    .filter(m => { const e = new Date(m.endDate).getTime(); return e > now && (e - now) <= 172800000; })
+    .filter(m => m.liquidity >= 10000)
+    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate))
+    .slice(0, 20);
 
+  // Trending: Biggest price moves with real volume (news-driven)
   const trending = markets
-    .filter(m => m.priceChange1d !== null && Math.abs(m.priceChange1d) > 0.005)
+    .filter(m => m.priceChange1d !== null && Math.abs(m.priceChange1d) > 0.02)
+    .filter(m => m.volume24hr >= 3000)
     .sort((a, b) => Math.abs(b.priceChange1d) - Math.abs(a.priceChange1d))
-    .slice(0, 25);
+    .slice(0, 20);
 
-  const whales = markets
-    .filter(m => m.volumeRatio > 0.02 && m.volume24hr > 5000)
-    .sort((a, b) => b.volumeRatio - a.volumeRatio)
-    .slice(0, 25);
+  // News Lag: Stale prices near resolution — highest opportunity
+  const newsLag = markets
+    .filter(m => m.newsLag === 'HIGH' || m.newsLag === 'MEDIUM')
+    .filter(m => m.liquidity >= 15000)
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+    .slice(0, 20);
 
-  return { dontMiss, highRisk, safePlays, closingSoon, trending, whales };
+  return { dontMiss, highRisk, safePlays, closingSoon, trending, newsLag };
 }
 
 async function refreshCache() {
@@ -211,7 +247,7 @@ async function refreshCache() {
         safePlays: columns.safePlays.length,
         closingSoon: columns.closingSoon.length,
         trending: columns.trending.length,
-        whales: columns.whales.length,
+        newsLag: columns.newsLag.length,
       },
     };
 
@@ -301,7 +337,7 @@ app.get('/api/closing-soon', async (_req, res) => {
 app.get('/api/whales', async (_req, res) => {
   try {
     await refreshCache();
-    res.json(cache.columns.whales);
+    res.json(cache.columns.newsLag);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
