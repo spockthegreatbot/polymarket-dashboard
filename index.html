@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PolyIntel — Polymarket Intelligence Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #050508;
+  --bg-secondary: #0a0a10;
+  --bg-card: rgba(15, 15, 25, 0.8);
+  --bg-card-hover: rgba(25, 25, 45, 0.9);
+  --bg-card-solid: #0f0f19;
+  --border: rgba(255,255,255,0.06);
+  --border-hover: rgba(255,255,255,0.12);
+  --text-primary: #e8e8f0;
+  --text-secondary: #8888a8;
+  --text-muted: #555570;
+  --accent: #6C63FF;
+  --accent-dim: rgba(108,99,255,0.15);
+  --accent-glow: rgba(108,99,255,0.3);
+  --green: #00d68f;
+  --green-dim: rgba(0,214,143,0.12);
+  --red: #ff4d6a;
+  --red-dim: rgba(255,77,106,0.12);
+  --yellow: #ffc107;
+  --yellow-dim: rgba(255,193,7,0.12);
+  --orange: #ff8c42;
+  --orange-dim: rgba(255,140,66,0.12);
+  --purple: #a855f7;
+  --purple-dim: rgba(168,85,247,0.12);
+  --blue: #4d8eff;
+  --blue-dim: rgba(77,142,255,0.12);
+}
+.light {
+  --bg-primary: #f0f0f5;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255,255,255,0.9);
+  --bg-card-hover: rgba(240,240,248,0.95);
+  --bg-card-solid: #ffffff;
+  --border: rgba(0,0,0,0.08);
+  --border-hover: rgba(0,0,0,0.15);
+  --text-primary: #1a1a2e;
+  --text-secondary: #5a5a7a;
+  --text-muted: #9898b0;
+  --accent-dim: rgba(108,99,255,0.1);
+  --accent-glow: rgba(108,99,255,0.15);
+  --green-dim: rgba(0,214,143,0.08);
+  --red-dim: rgba(255,77,106,0.08);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  height: 100vh;
+}
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border-hover); border-radius:3px; }
+
+/* ── Layout ─────────────────────────────── */
+#app { display:flex; flex-direction:column; height:100vh; }
+
+/* ── Header ─────────────────────────────── */
+.header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 12px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.logo { display:flex; align-items:center; gap:10px; }
+.logo h1 { font-size:20px; font-weight:800; letter-spacing:-0.5px; }
+.logo h1 span { color: var(--accent); }
+.logo .subtitle { font-size:11px; color:var(--text-muted); }
+.header-actions { display:flex; align-items:center; gap:6px; }
+.tab-btn {
+  display:flex; align-items:center; gap:6px;
+  padding: 6px 14px; border-radius:8px; border:none;
+  font-size:12px; font-weight:600; cursor:pointer;
+  background:transparent; color:var(--text-secondary);
+  transition: all 0.2s;
+}
+.tab-btn:hover { background:var(--accent-dim); color:var(--text-primary); }
+.tab-btn.active { background:var(--accent); color:#fff; }
+.tab-btn .count {
+  font-size:10px; padding:1px 6px; border-radius:10px;
+  background:rgba(255,255,255,0.15);
+}
+.theme-btn {
+  width:34px; height:34px; border-radius:8px; border:none;
+  background:transparent; color:var(--text-secondary);
+  cursor:pointer; font-size:16px; transition:all 0.2s;
+}
+.theme-btn:hover { background:var(--accent-dim); }
+
+/* ── Stats Bar ──────────────────────────── */
+.stats-bar {
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:10px 20px;
+  background:var(--bg-secondary);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.stat-chip {
+  display:flex; align-items:center; gap:8px;
+  padding:6px 14px; border-radius:10px;
+  background:var(--bg-card); border:1px solid var(--border);
+  backdrop-filter:blur(12px);
+}
+.stat-chip .stat-icon { font-size:14px; }
+.stat-chip .stat-label { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
+.stat-chip .stat-value { font-size:13px; font-weight:700; }
+.refresh-indicator {
+  margin-left:auto; display:flex; align-items:center; gap:8px;
+  font-size:11px; color:var(--text-muted);
+}
+.refresh-dot {
+  width:6px; height:6px; border-radius:50%;
+  background:var(--green); animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+.refresh-spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── Search Bar ─────────────────────────── */
+.search-bar {
+  display:flex; flex-direction:column; gap:10px;
+  padding:12px 20px;
+  background:var(--bg-secondary);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.search-row { display:flex; align-items:center; gap:12px; }
+.search-input-wrap {
+  position:relative; flex:1; max-width:420px;
+}
+.search-input-wrap svg { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted); }
+.search-input {
+  width:100%; padding:9px 12px 9px 38px;
+  border-radius:10px; border:1px solid var(--border);
+  background:var(--bg-card); color:var(--text-primary);
+  font-size:13px; font-family:inherit;
+  backdrop-filter:blur(12px);
+  transition:border-color 0.2s;
+}
+.search-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+.search-input::placeholder { color:var(--text-muted); }
+.search-kbd {
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  font-size:10px; color:var(--text-muted); padding:2px 6px;
+  border:1px solid var(--border); border-radius:4px; background:var(--bg-secondary);
+}
+.sort-select {
+  padding:9px 14px; border-radius:10px; border:1px solid var(--border);
+  background:var(--bg-card); color:var(--text-primary);
+  font-size:12px; font-family:inherit; cursor:pointer;
+  backdrop-filter:blur(12px);
+}
+.sort-select:focus { outline:none; border-color:var(--accent); }
+.cat-tabs { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; }
+.cat-btn {
+  display:flex; align-items:center; gap:5px;
+  padding:5px 14px; border-radius:20px; border:1px solid var(--border);
+  background:var(--bg-card); color:var(--text-secondary);
+  font-size:11px; font-weight:600; cursor:pointer;
+  white-space:nowrap; transition:all 0.2s;
+  backdrop-filter:blur(12px);
+}
+.cat-btn:hover { border-color:var(--border-hover); color:var(--text-primary); }
+.cat-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+/* ── Main Content ───────────────────────── */
+.main { flex:1; overflow:hidden; position:relative; }
+
+/* ── Kanban Board ───────────────────────── */
+.kanban {
+  display:flex; gap:12px; padding:16px 20px;
+  overflow-x:auto; height:100%;
+}
+.column {
+  flex-shrink:0; width:340px; display:flex; flex-direction:column;
+  height:100%;
+}
+.column-header {
+  padding:10px 12px; margin-bottom:8px;
+  border-radius:12px;
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  backdrop-filter:blur(16px);
+}
+.column-title { display:flex; align-items:center; gap:8px; margin-bottom:2px; }
+.column-title .emoji { font-size:16px; }
+.column-title h3 { font-size:13px; font-weight:700; }
+.column-title .col-count {
+  margin-left:auto; font-size:10px; font-weight:700;
+  padding:2px 8px; border-radius:10px;
+}
+.column-desc { font-size:10px; color:var(--text-muted); }
+.column-cards {
+  flex:1; overflow-y:auto; display:flex; flex-direction:column;
+  gap:8px; padding:2px 2px 16px 2px;
+}
+
+/* ── Market Card ────────────────────────── */
+.card {
+  padding:14px; border-radius:14px;
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  backdrop-filter:blur(16px);
+  cursor:pointer; transition:all 0.25s;
+  animation: fadeInUp 0.3s ease-out both;
+}
+.card:hover {
+  border-color:var(--border-hover);
+  background:var(--bg-card-hover);
+  transform:translateY(-1px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.3);
+}
+@keyframes fadeInUp {
+  from { opacity:0; transform:translateY(8px); }
+  to { opacity:1; transform:translateY(0); }
+}
+.card-cat { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.card-cat-badge {
+  font-size:9px; font-weight:600; text-transform:uppercase;
+  letter-spacing:0.5px; color:var(--text-muted);
+}
+.card-urgency {
+  display:inline-flex; align-items:center; gap:3px;
+  font-size:9px; font-weight:700; padding:2px 7px;
+  border-radius:10px; animation: pulse 1.5s infinite;
+}
+.card-urgency.urgent { background:var(--red-dim); color:var(--red); }
+.card-urgency.soon { background:var(--orange-dim); color:var(--orange); }
+.card-title {
+  font-size:13px; font-weight:600; line-height:1.35;
+  margin-bottom:10px;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.card-price-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.card-price {
+  font-size:22px; font-weight:800; letter-spacing:-0.5px;
+}
+.card-change {
+  display:flex; align-items:center; gap:3px;
+  font-size:11px; font-weight:600;
+}
+.prob-bar {
+  height:6px; border-radius:3px; overflow:hidden;
+  background:var(--red-dim); margin-bottom:4px;
+}
+.prob-bar-fill {
+  height:100%; border-radius:3px;
+  transition:width 0.5s ease;
+}
+.prob-labels { display:flex; justify-content:space-between; font-size:9px; color:var(--text-muted); margin-bottom:10px; }
+.card-stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:10px; }
+.card-stat {
+  padding:6px 8px; border-radius:8px;
+  background:var(--bg-primary); text-align:center;
+}
+.card-stat-label { font-size:9px; color:var(--text-muted); margin-bottom:2px; }
+.card-stat-value { font-size:11px; font-weight:700; }
+.card-actions {
+  display:flex; align-items:center; gap:6px;
+  padding-top:10px; border-top:1px solid var(--border);
+}
+.card-action-btn {
+  width:30px; height:30px; border-radius:8px; border:none;
+  background:transparent; color:var(--text-muted);
+  cursor:pointer; font-size:14px; transition:all 0.2s;
+  display:flex; align-items:center; justify-content:center;
+}
+.card-action-btn:hover { background:var(--accent-dim); color:var(--accent); }
+.card-action-btn.watched { color:var(--yellow); background:var(--yellow-dim); }
+.card-action-btn.queued { color:var(--purple); background:var(--purple-dim); }
+.card-action-btn.link { margin-left:auto; }
+.card-action-btn.link:hover { color:var(--blue); background:var(--blue-dim); }
+
+/* ── Detail Modal ───────────────────────── */
+.modal-overlay {
+  position:fixed; inset:0; z-index:100;
+  background:rgba(0,0,0,0.7); backdrop-filter:blur(8px);
+  display:flex; align-items:center; justify-content:center;
+  padding:20px; opacity:0; pointer-events:none;
+  transition:opacity 0.2s;
+}
+.modal-overlay.open { opacity:1; pointer-events:all; }
+.modal {
+  width:100%; max-width:680px; max-height:85vh;
+  overflow-y:auto; border-radius:20px;
+  background:var(--bg-card-solid);
+  border:1px solid var(--border);
+  box-shadow:0 40px 80px rgba(0,0,0,0.5);
+  transform:scale(0.95); transition:transform 0.2s;
+}
+.modal-overlay.open .modal { transform:scale(1); }
+.modal-header {
+  display:flex; align-items:start; justify-content:space-between;
+  padding:20px 24px; border-bottom:1px solid var(--border);
+  position:sticky; top:0; background:var(--bg-card-solid); z-index:1;
+}
+.modal-header h2 { font-size:18px; font-weight:700; line-height:1.3; padding-right:16px; }
+.modal-close {
+  width:36px; height:36px; border-radius:10px; border:none;
+  background:var(--bg-card); color:var(--text-secondary);
+  cursor:pointer; font-size:18px; flex-shrink:0; transition:all 0.2s;
+}
+.modal-close:hover { background:var(--red-dim); color:var(--red); }
+.modal-body { padding:24px; }
+.modal-prices { display:flex; gap:40px; margin-bottom:24px; }
+.modal-price-block .label { font-size:11px; color:var(--text-muted); margin-bottom:4px; }
+.modal-price-block .value { font-size:40px; font-weight:800; letter-spacing:-1px; }
+.modal-prob-bar { height:10px; border-radius:5px; overflow:hidden; background:var(--red-dim); margin-bottom:24px; }
+.modal-prob-bar-fill { height:100%; border-radius:5px; }
+.modal-changes { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:24px; }
+.modal-change-card { padding:14px; border-radius:12px; background:var(--bg-card); }
+.modal-change-card .label { font-size:10px; color:var(--text-muted); margin-bottom:6px; }
+.modal-change-card .value { font-size:14px; font-weight:700; }
+.modal-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:24px; }
+.modal-stat {
+  display:flex; justify-content:space-between; padding:10px 14px;
+  border-radius:10px; background:var(--bg-card);
+}
+.modal-stat .label { font-size:11px; color:var(--text-muted); }
+.modal-stat .value { font-size:11px; font-weight:700; }
+.modal-desc { margin-bottom:24px; }
+.modal-desc h3 { font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:8px; }
+.modal-desc p { font-size:13px; color:var(--text-secondary); line-height:1.6; white-space:pre-wrap; }
+.modal-actions {
+  display:flex; align-items:center; gap:10px;
+  padding-top:20px; border-top:1px solid var(--border);
+}
+.modal-action {
+  display:flex; align-items:center; gap:8px;
+  padding:10px 18px; border-radius:10px; border:none;
+  font-size:13px; font-weight:600; cursor:pointer;
+  transition:all 0.2s; font-family:inherit;
+}
+.modal-action.watch { background:var(--bg-card); color:var(--text-secondary); }
+.modal-action.watch:hover { color:var(--yellow); background:var(--yellow-dim); }
+.modal-action.watch.active { color:var(--yellow); background:var(--yellow-dim); }
+.modal-action.trader { background:var(--bg-card); color:var(--text-secondary); }
+.modal-action.trader:hover { color:var(--purple); background:var(--purple-dim); }
+.modal-action.trader.active { color:var(--purple); background:var(--purple-dim); }
+.modal-action.polymarket { background:var(--accent); color:#fff; margin-left:auto; }
+.modal-action.polymarket:hover { opacity:0.9; }
+
+/* ── Watchlist & Trader Queue ───────────── */
+.list-view { padding:20px; overflow-y:auto; height:100%; }
+.list-empty {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:80px 20px; color:var(--text-muted); text-align:center;
+}
+.list-empty .icon { font-size:48px; margin-bottom:16px; opacity:0.3; }
+.list-empty h3 { font-size:18px; font-weight:600; margin-bottom:6px; }
+.list-empty p { font-size:13px; }
+.list-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
+.queue-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.queue-header h3 { font-size:16px; font-weight:700; }
+.clear-btn {
+  display:flex; align-items:center; gap:6px;
+  padding:6px 14px; border-radius:8px; border:none;
+  font-size:11px; font-weight:600; cursor:pointer;
+  background:var(--red-dim); color:var(--red);
+  transition:all 0.2s; font-family:inherit;
+}
+.clear-btn:hover { background:var(--red); color:#fff; }
+.queue-item {
+  display:flex; align-items:center; gap:14px;
+  padding:14px; border-radius:12px;
+  background:var(--bg-card); border:1px solid var(--border);
+  backdrop-filter:blur(12px);
+}
+.queue-item-info { flex:1; min-width:0; }
+.queue-item-title { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.queue-item-meta { display:flex; gap:12px; font-size:11px; color:var(--text-muted); margin-top:4px; }
+.queue-remove {
+  width:30px; height:30px; border-radius:8px; border:none;
+  background:transparent; color:var(--text-muted);
+  cursor:pointer; font-size:16px; transition:all 0.2s;
+}
+.queue-remove:hover { background:var(--red-dim); color:var(--red); }
+
+/* ── Loading ────────────────────────────── */
+.loading-screen {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  height:100vh; gap:16px;
+}
+.loading-spinner {
+  width:48px; height:48px; border:3px solid var(--border);
+  border-top-color:var(--accent); border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+.error-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:12px; }
+.retry-btn {
+  padding:10px 24px; border-radius:10px; border:none;
+  background:var(--accent); color:#fff; font-size:13px;
+  font-weight:600; cursor:pointer; font-family:inherit;
+}
+
+/* ── Skeleton ───────────────────────────── */
+.skeleton {
+  background:linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
+  background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:8px;
+}
+@keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+
+/* ── Responsive ─────────────────────────── */
+@media(max-width:768px) {
+  .kanban { flex-direction:column; overflow-y:auto; overflow-x:hidden; }
+  .column { width:100%; }
+  .column-cards { max-height:none; }
+  .stats-bar { gap:8px; }
+  .stat-chip { padding:4px 10px; }
+  .header { padding:10px 14px; }
+  .search-bar { padding:10px 14px; }
+  .logo .subtitle { display:none; }
+  .modal { max-height:95vh; }
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ── Config ──────────────────────────────────────────────
+const API_BASE = (() => {
+  const h = window.location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8877';
+  if (h === '45.76.125.57') return window.location.origin;  // VPS: served by Express
+  return 'http://45.76.125.57:8877';  // GitHub Pages / Vercel → VPS backend
+})();
+
+// ── State ───────────────────────────────────────────────
+const state = {
+  tab: 'board',
+  columns: null,
+  allMarkets: [],
+  stats: null,
+  loading: true,
+  error: null,
+  search: '',
+  category: 'All',
+  sort: 'volume24hr',
+  selectedMarket: null,
+  searchResults: null,
+  watchlist: new Set(JSON.parse(localStorage.getItem('pm-watchlist') || '[]')),
+  traderQueue: JSON.parse(localStorage.getItem('pm-trader') || '[]'),
+  lastRefresh: null,
+  countdown: 60,
+  refreshing: false,
+};
+
+const CATEGORIES = ['All','Politics','Sports','Crypto','Entertainment','Science','Economics','Other'];
+const CAT_ICONS = { All:'🌐', Politics:'🏛️', Sports:'⚽', Crypto:'₿', Entertainment:'🎬', Science:'🔬', Economics:'📈', Other:'📦' };
+const SORT_OPTIONS = { volume24hr:'24h Volume', endDate:'End Date', liquidity:'Liquidity', edge:'Edge Score', newest:'Newest' };
+
+const COLUMN_CONFIG = [
+  { key:'dontMiss', title:"Don't Miss", emoji:'🔥', desc:'High conviction, high volume', color:'var(--red)' },
+  { key:'highRisk', title:'High Risk High Reward', emoji:'⚡', desc:'Near 50/50 or thin liquidity', color:'var(--purple)' },
+  { key:'safePlays', title:'Safe Plays', emoji:'📊', desc:'High probability, consistent returns', color:'var(--green)' },
+  { key:'closingSoon', title:'Closing Soon', emoji:'⏰', desc:'Ending within 48 hours', color:'var(--orange)' },
+  { key:'trending', title:'Trending', emoji:'👀', desc:'Biggest price moves in 24h', color:'var(--blue)' },
+  { key:'whales', title:'Whale Moves', emoji:'🐋', desc:'Unusual volume activity', color:'var(--yellow)' },
+];
+
+// ── Helpers ─────────────────────────────────────────────
+function formatUSD(v) {
+  if (v >= 1e9) return `$${(v/1e9).toFixed(1)}B`;
+  if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `$${(v/1e3).toFixed(1)}K`;
+  return `$${Math.round(v)}`;
+}
+
+function formatPct(v) { return `${(v*100).toFixed(1)}%`; }
+
+function countdown(endDate) {
+  const diff = new Date(endDate).getTime() - Date.now();
+  if (diff <= 0) return 'Ended';
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (d > 30) return `${Math.floor(d/30)}mo`;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function urgency(endDate) {
+  const diff = new Date(endDate).getTime() - Date.now();
+  if (diff <= 0) return 'urgent';
+  if (diff <= 7200000) return 'urgent';
+  if (diff <= 172800000) return 'soon';
+  return '';
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function saveWatchlist() { localStorage.setItem('pm-watchlist', JSON.stringify([...state.watchlist])); }
+function saveTrader() { localStorage.setItem('pm-trader', JSON.stringify(state.traderQueue)); }
+
+function toggleWatch(id) {
+  if (state.watchlist.has(id)) state.watchlist.delete(id);
+  else state.watchlist.add(id);
+  saveWatchlist();
+  render();
+}
+
+function sendToTrader(m) {
+  if (state.traderQueue.some(q => q.id === m.id)) return;
+  state.traderQueue.push({
+    id:m.id, eventSlug:m.eventSlug, question:m.question,
+    yesPrice:m.yesPrice, noPrice:m.noPrice, volume24hr:m.volume24hr,
+    liquidity:m.liquidity, endDate:m.endDate, addedAt:new Date().toISOString()
+  });
+  saveTrader();
+  render();
+}
+
+function removeFromTrader(id) {
+  state.traderQueue = state.traderQueue.filter(q => q.id !== id);
+  saveTrader();
+  render();
+}
+
+function clearTrader() {
+  state.traderQueue = [];
+  saveTrader();
+  render();
+}
+
+// ── SVG Icons ───────────────────────────────────────────
+const icons = {
+  search: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
+  star: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+  starFill: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+  send: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>`,
+  external: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`,
+  close: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
+  up: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m7 17 5-5 5 5"/><path d="m7 11 5-5 5 5"/></svg>`,
+  down: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m7 7 5 5 5-5"/><path d="m7 13 5 5 5-5"/></svg>`,
+  refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`,
+  grid: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/></svg>`,
+  trash: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`,
+};
+
+// ── API ─────────────────────────────────────────────────
+async function fetchData() {
+  state.refreshing = true;
+  render();
+  try {
+    const [colRes, statsRes] = await Promise.all([
+      fetch(`${API_BASE}/api/columns`),
+      fetch(`${API_BASE}/api/stats`),
+    ]);
+    if (!colRes.ok || !statsRes.ok) throw new Error('API error');
+    state.columns = await colRes.json();
+    state.stats = await statsRes.json();
+    // Build allMarkets from columns (deduped)
+    const seen = new Set();
+    state.allMarkets = [];
+    for (const col of Object.values(state.columns)) {
+      for (const m of col) {
+        if (!seen.has(m.id)) { seen.add(m.id); state.allMarkets.push(m); }
+      }
+    }
+    state.lastRefresh = new Date();
+    state.countdown = 60;
+    state.loading = false;
+    state.error = null;
+  } catch (err) {
+    console.error('Fetch error:', err);
+    if (state.loading) { state.error = err.message; }
+  }
+  state.refreshing = false;
+  render();
+}
+
+// ── Render ──────────────────────────────────────────────
+function render() {
+  const app = document.getElementById('app');
+  if (state.loading && !state.columns) {
+    app.innerHTML = `<div class="loading-screen"><div class="loading-spinner"></div><div style="font-size:16px;font-weight:600">Loading Polymarket data...</div><div style="font-size:12px;color:var(--text-muted)">Fetching all active markets</div></div>`;
+    return;
+  }
+  if (state.error && !state.columns) {
+    app.innerHTML = `<div class="error-screen"><div style="font-size:48px;margin-bottom:8px">⚠️</div><div style="font-size:16px;font-weight:600">Failed to load data</div><div style="font-size:12px;color:var(--text-muted)">${esc(state.error)}</div><button class="retry-btn" onclick="fetchData()">Retry</button></div>`;
+    return;
+  }
+
+  const s = state.stats || {};
+  const isLight = document.documentElement.classList.contains('light');
+
+  app.innerHTML = `
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">
+        <h1><span>Poly</span>Intel</h1>
+        <span class="subtitle">Polymarket Intelligence Dashboard</span>
+      </div>
+      <div class="header-actions">
+        <button class="tab-btn ${state.tab==='board'?'active':''}" onclick="setTab('board')">${icons.grid} Board</button>
+        <button class="tab-btn ${state.tab==='watchlist'?'active':''}" onclick="setTab('watchlist')">⭐ Watchlist <span class="count">${state.watchlist.size}</span></button>
+        <button class="tab-btn ${state.tab==='trader'?'active':''}" onclick="setTab('trader')">📤 Trader <span class="count">${state.traderQueue.length}</span></button>
+        <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme">${isLight?'🌙':'☀️'}</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat-chip"><span class="stat-icon">📊</span><span class="stat-label">Markets</span><span class="stat-value">${(s.totalMarkets||0).toLocaleString()}</span></div>
+      <div class="stat-chip"><span class="stat-icon">💰</span><span class="stat-label">24h Vol</span><span class="stat-value">${s.totalVolume24hFmt||'$0'}</span></div>
+      <div class="stat-chip"><span class="stat-icon">⏰</span><span class="stat-label">Closing Today</span><span class="stat-value">${s.closingToday||0}</span></div>
+      <div class="stat-chip"><span class="stat-icon">⭐</span><span class="stat-label">Watchlist</span><span class="stat-value">${state.watchlist.size}</span></div>
+      <div class="refresh-indicator">
+        <div class="${state.refreshing?'refresh-spin':''}" style="display:flex">${icons.refresh}</div>
+        <span id="countdown-text">Refresh in ${state.countdown}s</span>
+        <div class="refresh-dot"></div>
+      </div>
+    </div>
+
+    ${state.tab === 'board' ? renderBoard() : ''}
+    ${state.tab === 'watchlist' ? renderWatchlist() : ''}
+    ${state.tab === 'trader' ? renderTraderQueue() : ''}
+
+    <!-- Modal -->
+    <div class="modal-overlay ${state.selectedMarket?'open':''}" onclick="closeModal()">
+      ${state.selectedMarket ? renderModal(state.selectedMarket) : ''}
+    </div>
+  `;
+}
+
+function renderBoard() {
+  return `
+    <div class="search-bar">
+      <div class="search-row">
+        <div class="search-input-wrap">
+          ${icons.search}
+          <input class="search-input" id="searchInput" type="text" value="${esc(state.search)}" placeholder="Search markets..." oninput="onSearch(this.value)">
+          <span class="search-kbd">⌘K</span>
+        </div>
+        <select class="sort-select" onchange="onSort(this.value)">
+          ${Object.entries(SORT_OPTIONS).map(([k,v])=>`<option value="${k}" ${state.sort===k?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+      <div class="cat-tabs">
+        ${CATEGORIES.map(c=>`<button class="cat-btn ${state.category===c?'active':''}" onclick="onCategory('${c}')">${CAT_ICONS[c]||''} ${c}</button>`).join('')}
+      </div>
+    </div>
+    <div class="main">
+      <div class="kanban">
+        ${renderColumns()}
+      </div>
+    </div>
+  `;
+}
+
+function getFilteredColumns() {
+  if (!state.columns) return {};
+
+  // If we have search results from server, show those
+  if (state.search && state.search.length >= 2 && state.searchResults) {
+    return {
+      dontMiss: state.searchResults.slice(0, 50),
+      highRisk: [], safePlays: [], closingSoon: [], trending: [], whales: []
+    };
+  }
+
+  // Category filter: client-side filter of column data
+  if (state.category !== 'All') {
+    const filtered = {};
+    for (const [key, markets] of Object.entries(state.columns)) {
+      filtered[key] = markets.filter(m => m.category === state.category);
+    }
+    return filtered;
+  }
+
+  return state.columns;
+}
+
+function renderColumns() {
+  const cols = getFilteredColumns();
+  const isFiltered = state.search || state.category !== 'All';
+
+  if (isFiltered) {
+    const markets = cols.dontMiss || [];
+    return `<div class="column" style="width:100%;flex-shrink:1">
+      <div class="column-header">
+        <div class="column-title">
+          <span class="emoji">🔍</span>
+          <h3>Search Results</h3>
+          <span class="col-count" style="background:var(--accent-dim);color:var(--accent)">${markets.length}</span>
+        </div>
+        <div class="column-desc">${state.search ? `"${esc(state.search)}"` : ''} ${state.category !== 'All' ? state.category : ''}</div>
+      </div>
+      <div class="column-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:8px;max-height:none;overflow:visible">
+        ${markets.map(m => renderCard(m)).join('')}
+        ${markets.length === 0 ? '<div style="padding:40px;text-align:center;color:var(--text-muted)">No markets match your filters</div>' : ''}
+      </div>
+    </div>`;
+  }
+
+  return COLUMN_CONFIG.map(cfg => {
+    const markets = cols[cfg.key] || [];
+    return `<div class="column">
+      <div class="column-header">
+        <div class="column-title">
+          <span class="emoji">${cfg.emoji}</span>
+          <h3>${cfg.title}</h3>
+          <span class="col-count" style="background:${cfg.color}22;color:${cfg.color}">${markets.length}</span>
+        </div>
+        <div class="column-desc">${cfg.desc}</div>
+      </div>
+      <div class="column-cards">
+        ${markets.map((m,i) => renderCard(m, i)).join('')}
+        ${markets.length === 0 ? '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">No markets match</div>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderCard(m, idx=0) {
+  const urg = urgency(m.endDate);
+  const change = m.priceChange1d;
+  const changeAbs = change ? Math.abs(change) : 0;
+  const isUp = change > 0;
+  const watched = state.watchlist.has(m.id);
+  const queued = state.traderQueue.some(q => q.id === m.id);
+  const yesColor = m.yesPrice >= 0.5 ? 'var(--green)' : 'var(--red)';
+  const barGrad = m.yesPrice > 0.7 ? 'var(--green)' : m.yesPrice > 0.4 ? 'var(--yellow)' : 'var(--red)';
+
+  return `<div class="card" style="animation-delay:${idx*30}ms" onclick="openModal('${m.id}')">
+    <div class="card-cat">
+      <span style="font-size:11px">${m.categoryIcon||'📦'}</span>
+      <span class="card-cat-badge">${esc(m.category)}</span>
+      ${urg ? `<span class="card-urgency ${urg}">⏱ ${urg==='urgent'?'CLOSING':'SOON'}</span>` : ''}
+    </div>
+    <div class="card-title">${esc(m.question)}</div>
+    <div class="card-price-row">
+      <span class="card-price" style="color:${yesColor}">${formatPct(m.yesPrice)}</span>
+      ${change !== null && changeAbs > 0.001 ? `<span class="card-change" style="color:${isUp?'var(--green)':'var(--red)'}">${isUp?icons.up:icons.down} ${formatPct(changeAbs)}</span>` : ''}
+    </div>
+    <div class="prob-bar"><div class="prob-bar-fill" style="width:${m.yesPrice*100}%;background:linear-gradient(90deg,${yesColor},${barGrad})"></div></div>
+    <div class="prob-labels"><span>YES ${formatPct(m.yesPrice)}</span><span>NO ${formatPct(m.noPrice)}</span></div>
+    <div class="card-stats">
+      <div class="card-stat"><div class="card-stat-label">24h Vol</div><div class="card-stat-value">${m.volume24hrFmt || formatUSD(m.volume24hr)}</div></div>
+      <div class="card-stat"><div class="card-stat-label">Liquidity</div><div class="card-stat-value">${m.liquidityFmt || formatUSD(m.liquidity)}</div></div>
+      <div class="card-stat"><div class="card-stat-label">Ends</div><div class="card-stat-value" ${urg==='urgent'?'style="color:var(--red)"':urg==='soon'?'style="color:var(--orange)"':''}>${countdown(m.endDate)}</div></div>
+    </div>
+    <div class="card-actions">
+      <button class="card-action-btn ${watched?'watched':''}" onclick="event.stopPropagation();toggleWatch('${m.id}')" title="${watched?'Remove from watchlist':'Add to watchlist'}">${watched?icons.starFill:icons.star}</button>
+      <button class="card-action-btn ${queued?'queued':''}" onclick="event.stopPropagation();sendToTraderById('${m.id}')" title="${queued?'In trader queue':'Send to Trader'}">${icons.send}</button>
+      <a class="card-action-btn link" href="${m.polymarketUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open on Polymarket">${icons.external}</a>
+    </div>
+  </div>`;
+}
+
+function renderModal(m) {
+  const watched = state.watchlist.has(m.id);
+  const queued = state.traderQueue.some(q => q.id === m.id);
+  const yesColor = m.yesPrice >= 0.5 ? 'var(--green)' : 'var(--red)';
+  const changes = [
+    { label:'24h Change', v:m.priceChange1d },
+    { label:'1w Change', v:m.priceChange1w },
+    { label:'1m Change', v:m.priceChange1m },
+  ];
+  const stats = [
+    { l:'24h Volume', v:formatUSD(m.volume24hr) },
+    { l:'Total Volume', v:formatUSD(m.volume) },
+    { l:'Liquidity', v:formatUSD(m.liquidity) },
+    { l:'Spread', v:formatPct(m.spread) },
+    { l:'Best Bid', v:formatPct(m.bestBid) },
+    { l:'Best Ask', v:formatPct(m.bestAsk) },
+    { l:'Ends In', v:countdown(m.endDate) },
+    { l:'End Date', v:new Date(m.endDate).toLocaleDateString() },
+  ];
+
+  return `<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>${esc(m.question)}</h2>
+      <button class="modal-close" onclick="closeModal()">${icons.close}</button>
+    </div>
+    <div class="modal-body">
+      ${m.eventTitle !== m.question ? `<p style="font-size:12px;color:var(--text-secondary);margin-bottom:20px">Event: ${esc(m.eventTitle)}</p>` : ''}
+      <div class="modal-prices">
+        <div class="modal-price-block"><div class="label">YES Price</div><div class="value" style="color:${yesColor}">${formatPct(m.yesPrice)}</div></div>
+        <div class="modal-price-block"><div class="label">NO Price</div><div class="value" style="color:var(--text-secondary)">${formatPct(m.noPrice)}</div></div>
+      </div>
+      <div class="modal-prob-bar"><div class="modal-prob-bar-fill" style="width:${m.yesPrice*100}%;background:${yesColor}"></div></div>
+      <div class="modal-changes">
+        ${changes.map(c => `<div class="modal-change-card"><div class="label">${c.label}</div>${c.v !== null && c.v !== undefined ? `<div class="value" style="color:${c.v>0?'var(--green)':c.v<0?'var(--red)':'var(--text-secondary)'}">${c.v>0?'▲':c.v<0?'▼':''} ${c.v>0?'+':''}${formatPct(Math.abs(c.v))}</div>` : `<div class="value" style="color:var(--text-muted)">—</div>`}</div>`).join('')}
+      </div>
+      <div class="modal-stats">${stats.map(s=>`<div class="modal-stat"><span class="label">${s.l}</span><span class="value">${s.v}</span></div>`).join('')}</div>
+      ${m.description ? `<div class="modal-desc"><h3>Resolution Criteria</h3><p>${esc(m.description).substring(0,1000)}</p></div>` : ''}
+      <div class="modal-actions">
+        <button class="modal-action watch ${watched?'active':''}" onclick="toggleWatch('${m.id}');render()">${watched?icons.starFill:icons.star} ${watched?'Watching':'Watchlist'}</button>
+        <button class="modal-action trader ${queued?'active':''}" onclick="sendToTraderById('${m.id}');render()">${icons.send} ${queued?'In Queue':'Send to Trader'}</button>
+        <a class="modal-action polymarket" href="${m.polymarketUrl}" target="_blank" rel="noopener">${icons.external} Polymarket</a>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderWatchlist() {
+  const watched = state.allMarkets.filter(m => state.watchlist.has(m.id));
+  if (!watched.length) {
+    return `<div class="main"><div class="list-view"><div class="list-empty"><div class="icon">⭐</div><h3>No markets in watchlist</h3><p>Star markets from the board to track them here</p></div></div></div>`;
+  }
+  return `<div class="main"><div class="list-view"><div class="list-grid">${watched.map(m=>renderCard(m)).join('')}</div></div></div>`;
+}
+
+function renderTraderQueue() {
+  if (!state.traderQueue.length) {
+    return `<div class="main"><div class="list-view"><div class="list-empty"><div class="icon">📤</div><h3>Trader queue is empty</h3><p>Send markets to your Trader agent from any card</p></div></div></div>`;
+  }
+  return `<div class="main"><div class="list-view">
+    <div class="queue-header">
+      <h3>${state.traderQueue.length} market${state.traderQueue.length!==1?'s':''} queued</h3>
+      <button class="clear-btn" onclick="clearTrader()">${icons.trash} Clear All</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${state.traderQueue.map(item => {
+        const yesColor = item.yesPrice >= 0.5 ? 'var(--green)' : 'var(--red)';
+        return `<div class="queue-item">
+          <div class="queue-item-info">
+            <div class="queue-item-title">${esc(item.question)}</div>
+            <div class="queue-item-meta">
+              <span style="color:${yesColor};font-weight:600">YES ${formatPct(item.yesPrice)}</span>
+              <span>Vol: ${formatUSD(item.volume24hr)}</span>
+              <span>Liq: ${formatUSD(item.liquidity)}</span>
+              <span>Ends: ${countdown(item.endDate)}</span>
+            </div>
+          </div>
+          <button class="queue-remove" onclick="removeFromTrader('${item.id}')">${icons.close}</button>
+        </div>`;
+      }).join('')}
+    </div>
+  </div></div>`;
+}
+
+// ── Event Handlers ──────────────────────────────────────
+function setTab(t) { state.tab = t; render(); }
+let searchTimer = null;
+function onSearch(v) {
+  state.search = v;
+  clearTimeout(searchTimer);
+  if (v.length >= 2) {
+    searchTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/markets?search=${encodeURIComponent(v)}&sort=${state.sort}&category=${state.category}&limit=100`);
+        if (res.ok) {
+          const data = await res.json();
+          state.searchResults = data.markets || [];
+        }
+      } catch(e) { console.error(e); }
+      render();
+    }, 300);
+  } else {
+    state.searchResults = null;
+  }
+  render();
+}
+function onSort(v) { state.sort = v; render(); }
+function onCategory(c) { state.category = c; render(); }
+
+function openModal(id) {
+  const m = state.allMarkets.find(x => x.id === id);
+  if (m) { state.selectedMarket = m; render(); }
+}
+function closeModal() { state.selectedMarket = null; render(); }
+
+function sendToTraderById(id) {
+  const m = state.allMarkets.find(x => x.id === id);
+  if (m) sendToTrader(m);
+}
+
+function toggleTheme() {
+  document.documentElement.classList.toggle('light');
+  localStorage.setItem('pm-theme', document.documentElement.classList.contains('light') ? 'light' : 'dark');
+  render();
+}
+
+// ── Keyboard Shortcuts ──────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    const input = document.getElementById('searchInput');
+    if (input) input.focus();
+    else { state.tab = 'board'; render(); setTimeout(() => document.getElementById('searchInput')?.focus(), 50); }
+  }
+  if (e.key === 'Escape' && state.selectedMarket) { closeModal(); }
+});
+
+// ── Init ────────────────────────────────────────────────
+if (localStorage.getItem('pm-theme') === 'light') document.documentElement.classList.add('light');
+
+// Countdown timer
+setInterval(() => {
+  state.countdown = Math.max(0, state.countdown - 1);
+  const el = document.getElementById('countdown-text');
+  if (el) el.textContent = `Refresh in ${state.countdown}s`;
+}, 1000);
+
+// Auto-refresh every 60s
+setInterval(fetchData, 60000);
+
+// Initial load
+fetchData();
+</script>
+</body>
+</html>
