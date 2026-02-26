@@ -6,10 +6,10 @@ const path = require('path');
 const app = express();
 const PORT = 8877;
 const GAMMA_BASE = 'https://gamma-api.polymarket.com';
-const CACHE_TTL = 30_000; // 30s
+const CACHE_TTL = 120_000; // 2 min cache, refresh takes ~12s for 31k markets
 
 // ── Cache ──────────────────────────────────────────────────────────
-let cache = { events: null, markets: null, stats: null, ts: 0 };
+let cache = { events: null, markets: null, stats: null, ts: 0, refreshing: false };
 
 // ── Middleware ──────────────────────────────────────────────────────
 app.use(cors());
@@ -178,6 +178,12 @@ function categorizeColumns(markets) {
 
 async function refreshCache() {
   if (Date.now() - cache.ts < CACHE_TTL && cache.markets) return;
+  if (cache.refreshing) {
+    // Wait for in-progress refresh
+    while (cache.refreshing) await new Promise(r => setTimeout(r, 500));
+    return;
+  }
+  cache.refreshing = true;
   try {
     console.log(`[${new Date().toISOString()}] Refreshing cache...`);
     const events = await fetchAllEvents();
@@ -203,9 +209,10 @@ async function refreshCache() {
       },
     };
 
-    cache = { events, markets, columns, stats, ts: Date.now() };
+    cache = { events, markets, columns, stats, ts: Date.now(), refreshing: false };
     console.log(`[${new Date().toISOString()}] Cache refreshed: ${markets.length} markets from ${events.length} events`);
   } catch (err) {
+    cache.refreshing = false;
     console.error(`[${new Date().toISOString()}] Cache refresh failed:`, err.message);
     if (!cache.markets) throw err;
   }
@@ -238,7 +245,7 @@ app.get('/api/markets', async (req, res) => {
       };
       if (sorters[sort]) results.sort(sorters[sort]);
     }
-    if (limit) results = results.slice(0, parseInt(limit));
+    results = results.slice(0, Math.min(parseInt(limit) || 500, 2000));
 
     res.json({ markets: results, total: results.length });
   } catch (err) {

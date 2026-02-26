@@ -433,9 +433,12 @@ body {
 
 <script>
 // ── Config ──────────────────────────────────────────────
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? `http://localhost:8877`
-  : `${window.location.origin}`;
+const API_BASE = (() => {
+  const h = window.location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8877';
+  if (h.includes('vercel.app') || h.includes('.vercel.')) return '';  // same origin
+  return window.location.origin;  // VPS: served by Express
+})();
 
 // ── State ───────────────────────────────────────────────
 const state = {
@@ -449,6 +452,7 @@ const state = {
   category: 'All',
   sort: 'volume24hr',
   selectedMarket: null,
+  searchResults: null,
   watchlist: new Set(JSON.parse(localStorage.getItem('pm-watchlist') || '[]')),
   traderQueue: JSON.parse(localStorage.getItem('pm-trader') || '[]'),
   lastRefresh: null,
@@ -554,16 +558,21 @@ async function fetchData() {
   state.refreshing = true;
   render();
   try {
-    const [colRes, statsRes, mktsRes] = await Promise.all([
+    const [colRes, statsRes] = await Promise.all([
       fetch(`${API_BASE}/api/columns`),
       fetch(`${API_BASE}/api/stats`),
-      fetch(`${API_BASE}/api/markets?limit=5000`),
     ]);
-    if (!colRes.ok || !statsRes.ok || !mktsRes.ok) throw new Error('API error');
+    if (!colRes.ok || !statsRes.ok) throw new Error('API error');
     state.columns = await colRes.json();
     state.stats = await statsRes.json();
-    const mktsData = await mktsRes.json();
-    state.allMarkets = mktsData.markets || [];
+    // Build allMarkets from columns (deduped)
+    const seen = new Set();
+    state.allMarkets = [];
+    for (const col of Object.values(state.columns)) {
+      for (const m of col) {
+        if (!seen.has(m.id)) { seen.add(m.id); state.allMarkets.push(m); }
+      }
+    }
     state.lastRefresh = new Date();
     state.countdown = 60;
     state.loading = false;
@@ -657,30 +666,25 @@ function renderBoard() {
 
 function getFilteredColumns() {
   if (!state.columns) return {};
-  if (!state.search && state.category === 'All') return state.columns;
 
-  // When filtering, show all matching results in first column only
-  let filtered = [...state.allMarkets];
-  if (state.search) {
-    const q = state.search.toLowerCase();
-    filtered = filtered.filter(m => m.question.toLowerCase().includes(q) || m.eventTitle.toLowerCase().includes(q));
+  // If we have search results from server, show those
+  if (state.search && state.search.length >= 2 && state.searchResults) {
+    return {
+      dontMiss: state.searchResults.slice(0, 50),
+      highRisk: [], safePlays: [], closingSoon: [], trending: [], whales: []
+    };
   }
+
+  // Category filter: client-side filter of column data
   if (state.category !== 'All') {
-    filtered = filtered.filter(m => m.category === state.category);
+    const filtered = {};
+    for (const [key, markets] of Object.entries(state.columns)) {
+      filtered[key] = markets.filter(m => m.category === state.category);
+    }
+    return filtered;
   }
-  const sorters = {
-    volume24hr: (a,b) => b.volume24hr - a.volume24hr,
-    endDate: (a,b) => new Date(a.endDate) - new Date(b.endDate),
-    liquidity: (a,b) => b.liquidity - a.liquidity,
-    edge: (a,b) => b.edge - a.edge,
-    newest: (a,b) => new Date(b.endDate) - new Date(a.endDate),
-  };
-  if (sorters[state.sort]) filtered.sort(sorters[state.sort]);
 
-  return {
-    dontMiss: filtered.slice(0, 40),
-    highRisk: [], safePlays: [], closingSoon: [], trending: [], whales: []
-  };
+  return state.columns;
 }
 
 function renderColumns() {
@@ -845,7 +849,26 @@ function renderTraderQueue() {
 
 // ── Event Handlers ──────────────────────────────────────
 function setTab(t) { state.tab = t; render(); }
-function onSearch(v) { state.search = v; render(); }
+let searchTimer = null;
+function onSearch(v) {
+  state.search = v;
+  clearTimeout(searchTimer);
+  if (v.length >= 2) {
+    searchTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/markets?search=${encodeURIComponent(v)}&sort=${state.sort}&category=${state.category}&limit=100`);
+        if (res.ok) {
+          const data = await res.json();
+          state.searchResults = data.markets || [];
+        }
+      } catch(e) { console.error(e); }
+      render();
+    }, 300);
+  } else {
+    state.searchResults = null;
+  }
+  render();
+}
 function onSort(v) { state.sort = v; render(); }
 function onCategory(c) { state.category = c; render(); }
 
