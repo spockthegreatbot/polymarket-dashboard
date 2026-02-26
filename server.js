@@ -91,12 +91,16 @@ function processEvents(events) {
       const change1d = m.oneDayPriceChange ?? null;
       const change1w = m.oneWeekPriceChange ?? null;
 
-      // Edge score: how much value this market offers for betting
-      // High volume + high liquidity + moderate odds = good edge
+      // Edge score: multi-factor mispricing signal
       const oddsFactor = 1 - Math.abs(yes - 0.5) * 2; // peaks at 50/50
-      const volScore = Math.log10(Math.max(vol24, 1));
-      const liqScore = Math.log10(Math.max(liq, 1));
-      const edge = ((oddsFactor * 0.3) + (volScore / 7 * 0.4) + (liqScore / 7 * 0.3)) * 100;
+      const volMomentum = vol > 0 ? Math.min(vol24 / (vol * 0.1 + 1), 1) : 0;
+      const liqScore = Math.min(Math.log10(Math.max(liq, 1)) / 7, 1);
+      const daysLeft = m.endDate ? Math.max(0, (new Date(m.endDate) - Date.now()) / 86400000) : 30;
+      const timePressure = yes > 0.1 && yes < 0.9 ? Math.min(1, 7 / (daysLeft + 1)) : 0;
+      const momentumScore = Math.min(Math.abs(change1d || 0) * 10, 1);
+      const edge = Math.round(((oddsFactor * 0.25) + (volMomentum * 0.25) + (liqScore * 0.2) + (timePressure * 0.2) + (momentumScore * 0.1)) * 1000) / 10;
+      const newsLag = (change1d !== null && Math.abs(change1d) < 0.005 && daysLeft < 3) ? 'HIGH' :
+                      (change1d !== null && Math.abs(change1d) < 0.02 && daysLeft < 7) ? 'MEDIUM' : 'LOW';
 
       markets.push({
         id: m.id,
@@ -130,7 +134,9 @@ function processEvents(events) {
         competitive: m.competitive || 0,
         polymarketUrl: `https://polymarket.com/event/${ev.slug}`,
         volumeRatio: vol > 0 ? vol24 / vol : 0,
-        edge: Math.round(edge * 10) / 10,
+        edge,
+        newsLag,
+        daysLeft: Math.round(daysLeft * 10) / 10,
         acceptingOrders: m.acceptingOrders ?? true,
       });
     }
@@ -313,6 +319,49 @@ app.get('/api/stats', async (_req, res) => {
 // Serve index.html for root
 app.get('/', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ── Kalshi Arbitrage ───────────────────────────────────────────────
+app.get('/api/arb', async (_req, res) => {
+  try {
+    await refreshCache();
+    const arbs = [];
+    try {
+      const kr = await fetch('https://trading-api.kalshi.com/trade-api/v2/markets?limit=200&status=open', { headers: { 'Accept': 'application/json' } });
+      if (kr.ok) {
+        const kd = await kr.json();
+        for (const km of (kd.markets || [])) {
+          const kalshiYes = (km.yes_ask || km.yes_bid || 0) / 100;
+          if (!kalshiYes) continue;
+          const kmTitle = (km.title || km.subtitle || '').toLowerCase();
+          const words = kmTitle.split(' ').filter(w => w.length > 4);
+          const polyMatch = cache.markets.find(pm => {
+            const pt = pm.question.toLowerCase();
+            return words.filter(w => pt.includes(w)).length >= 2;
+          });
+          if (polyMatch) {
+            const gap = Math.abs(polyMatch.yesPrice - kalshiYes);
+            if (gap > 0.03) {
+              arbs.push({
+                polymarket: polyMatch.question,
+                polyUrl: polyMatch.polymarketUrl,
+                kalshiTitle: km.title,
+                polyPrice: polyMatch.yesPrice,
+                kalshiPrice: kalshiYes,
+                gap: Math.round(gap * 10000) / 100,
+                profitPer100: Math.round(gap * 100 * 100) / 100,
+                direction: polyMatch.yesPrice > kalshiYes ? 'Buy Kalshi YES' : 'Buy Polymarket YES',
+              });
+            }
+          }
+        }
+      }
+    } catch (e) { /* Kalshi unavailable */ }
+    arbs.sort((a, b) => b.gap - a.gap);
+    res.json({ arbs: arbs.slice(0, 20) });
+  } catch (err) {
+    res.json({ arbs: [], error: err.message });
+  }
 });
 
 // ── Start ──────────────────────────────────────────────────────────

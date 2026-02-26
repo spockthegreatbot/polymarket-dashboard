@@ -499,6 +499,8 @@ const state = {
   search: '',
   category: 'All',
   sort: 'volume24hr',
+  minEdge: 0,
+  arbData: null,
   selectedMarket: null,
   searchResults: null,
   watchlist: new Set(JSON.parse(localStorage.getItem('pm-watchlist') || '[]')),
@@ -625,6 +627,7 @@ async function fetchData() {
     state.countdown = 60;
     state.loading = false;
     state.error = null;
+    fetch(`${API_BASE}/api/arb`).then(r=>r.ok?r.json():null).then(d=>{ if(d) state.arbData=d; }).catch(()=>{});
   } catch (err) {
     console.error('Fetch error:', err);
     if (state.loading) { state.error = err.message; }
@@ -699,11 +702,36 @@ function renderBoard() {
         <select class="sort-select" onchange="onSort(this.value)">
           ${Object.entries(SORT_OPTIONS).map(([k,v])=>`<option value="${k}" ${state.sort===k?'selected':''}>${v}</option>`).join('')}
         </select>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);flex-shrink:0">
+          <span>Edge ≥</span>
+          <input type="range" min="0" max="80" step="10" value="${state.minEdge}" oninput="state.minEdge=parseInt(this.value);document.getElementById('edgeVal').textContent=this.value;render()" style="width:70px;accent-color:var(--accent)">
+          <span id="edgeVal" style="font-weight:700;color:var(--accent);min-width:18px">${state.minEdge}</span>
+        </div>
       </div>
       <div class="cat-tabs">
         ${CATEGORIES.map(c=>`<button class="cat-btn ${state.category===c?'active':''}" onclick="onCategory('${c}')">${CAT_ICONS[c]||''} ${c}</button>`).join('')}
       </div>
     </div>
+    ${state.arbData?.arbs?.length ? `
+    <div style="padding:8px 20px;background:linear-gradient(90deg,rgba(108,99,255,0.07),transparent);border-bottom:1px solid var(--border);flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:var(--accent)">⚡ ARB ALERTS</span>
+        <span style="font-size:10px;color:var(--text-muted)">${state.arbData.arbs.length} gap${state.arbData.arbs.length!==1?'s':''} found (Polymarket vs Kalshi)</span>
+      </div>
+      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">
+        ${state.arbData.arbs.slice(0,6).map(a=>`
+        <div style="flex-shrink:0;padding:8px 12px;border-radius:10px;background:var(--bg-card);border:1px solid var(--border);min-width:260px;max-width:280px">
+          <div style="font-size:10px;font-weight:600;margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.polymarket)}</div>
+          <div style="display:flex;gap:10px;font-size:10px;flex-wrap:wrap">
+            <span>Poly <b style="color:var(--accent)">${Math.round(a.polyPrice*100)}¢</b></span>
+            <span>Kalshi <b style="color:var(--green)">${Math.round(a.kalshiPrice*100)}¢</b></span>
+            <span style="color:var(--yellow)"><b>${a.gap}%</b> gap</span>
+            <span style="color:var(--green)">+$${a.profitPer100}/100</span>
+          </div>
+          <div style="margin-top:4px;font-size:9px;font-weight:700;color:var(--purple)">${a.direction}</div>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}
     <div class="main">
       <div class="kanban">
         ${renderColumns()}
@@ -723,11 +751,13 @@ function getFilteredColumns() {
     };
   }
 
-  // Category filter: client-side filter of column data
-  if (state.category !== 'All') {
+  // Category + edge filter
+  if (state.category !== 'All' || state.minEdge > 0) {
     const filtered = {};
     for (const [key, markets] of Object.entries(state.columns)) {
-      filtered[key] = markets.filter(m => m.category === state.category);
+      filtered[key] = markets
+        .filter(m => state.category === 'All' || m.category === state.category)
+        .filter(m => (m.edge || 0) >= state.minEdge);
     }
     return filtered;
   }
@@ -799,11 +829,15 @@ function renderCard(m, idx=0) {
     </div>
     <div class="prob-bar"><div class="prob-bar-fill" style="width:${m.yesPrice*100}%;background:linear-gradient(90deg,${yesColor},${barGrad})"></div></div>
     <div class="prob-labels"><span>YES ${formatPct(m.yesPrice)}</span><span>NO ${formatPct(m.noPrice)}</span></div>
-    <div class="card-stats">
+    <div class="card-stats" style="grid-template-columns:1fr 1fr 1fr 1fr">
       <div class="card-stat"><div class="card-stat-label">24h Vol</div><div class="card-stat-value">${m.volume24hrFmt || formatUSD(m.volume24hr)}</div></div>
       <div class="card-stat"><div class="card-stat-label">Liquidity</div><div class="card-stat-value">${m.liquidityFmt || formatUSD(m.liquidity)}</div></div>
       <div class="card-stat"><div class="card-stat-label">Ends</div><div class="card-stat-value" ${urg==='urgent'?'style="color:var(--red)"':urg==='soon'?'style="color:var(--orange)"':''}>${countdown(m.endDate)}</div></div>
+      <div class="card-stat"><div class="card-stat-label">Edge</div><div class="card-stat-value" style="color:${(m.edge||0)>=70?'var(--green)':(m.edge||0)>=40?'var(--yellow)':'var(--red)'}">${(m.edge||0)>=70?'🟢':(m.edge||0)>=40?'🟡':'🔴'} ${m.edge||0}</div></div>
     </div>
+    ${m.newsLag==='HIGH'?`<div style="margin:4px 0 6px;padding:3px 8px;border-radius:6px;background:var(--red-dim);color:var(--red);font-size:9px;font-weight:700;display:inline-flex;align-items:center;gap:3px">📰 NEWS LAG</div>`:''}
+    ${m.newsLag==='MEDIUM'?`<div style="margin:4px 0 6px;padding:3px 8px;border-radius:6px;background:var(--yellow-dim);color:var(--yellow);font-size:9px;font-weight:700;display:inline-flex;align-items:center;gap:3px">⚠️ SLOW PRICE MOVE</div>`:''}
+
     <div class="card-actions">
       <button class="card-action-btn ${watched?'watched':''}" onclick="event.stopPropagation();toggleWatch('${m.id}')" title="${watched?'Remove from watchlist':'Add to watchlist'}">${watched?icons.starFill:icons.star}</button>
       <button class="card-action-btn ${queued?'queued':''}" onclick="event.stopPropagation();sendToTraderById('${m.id}')" title="${queued?'In trader queue':'Send to Trader'}">${icons.send}</button>
