@@ -436,8 +436,8 @@ body {
 const API_BASE = (() => {
   const h = window.location.hostname;
   if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8877';
-  if (h.includes('vercel.app') || h.includes('.vercel.')) return '';  // same origin
-  return window.location.origin;  // VPS: served by Express
+  if (h === '45.76.125.57') return window.location.origin;  // VPS: served by Express
+  return 'http://45.76.125.57:8877';  // GitHub Pages / Vercel → VPS backend
 })();
 
 // ── State ───────────────────────────────────────────────
