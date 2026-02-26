@@ -2,18 +2,12 @@
   "version": 2,
   "builds": [
     { "src": "public/**", "use": "@vercel/static" },
-    { "src": "api/*.js", "use": "@vercel/node" }
+    { "src": "api/*.js", "use": "@vercel/node", "config": { "maxDuration": 60 } }
   ],
   "routes": [
     { "src": "/api/columns", "dest": "/api/columns.js" },
     { "src": "/api/stats", "dest": "/api/stats.js" },
     { "src": "/api/markets", "dest": "/api/markets.js" },
     { "src": "/(.*)", "dest": "/public/$1" }
-  ],
-  "functions": {
-    "api/*.js": {
-      "maxDuration": 60,
-      "memory": 1024
-    }
-  }
+  ]
 }
