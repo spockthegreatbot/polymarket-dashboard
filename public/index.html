@@ -429,7 +429,55 @@ body {
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="auth-gate" style="display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg-primary)">
+  <div style="text-align:center;padding:40px;border-radius:20px;background:var(--bg-card);border:1px solid var(--border);backdrop-filter:blur(16px);width:360px">
+    <div style="font-size:32px;margin-bottom:12px">🔒</div>
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:4px"><span style="color:var(--accent)">Poly</span>Intel</h2>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:24px">Enter password to continue</p>
+    <input id="auth-input" type="password" placeholder="Password" autofocus
+      style="width:100%;padding:12px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);font-size:14px;font-family:inherit;text-align:center;letter-spacing:2px"
+      onkeydown="if(event.key==='Enter')checkAuth()">
+    <div id="auth-error" style="margin-top:10px;font-size:11px;color:var(--red);display:none">Wrong password</div>
+    <button onclick="checkAuth()" style="margin-top:16px;width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity 0.2s" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Enter</button>
+  </div>
+</div>
+<div id="app" style="display:none"></div>
+
+<script>
+const AUTH_HASH = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918'; // sha256 of 'wagmi'
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function checkAuth() {
+  const input = document.getElementById('auth-input');
+  const hash = await sha256(input.value);
+  if (hash === AUTH_HASH) {
+    sessionStorage.setItem('pi-auth', '1');
+    showDashboard();
+  } else {
+    document.getElementById('auth-error').style.display = 'block';
+    input.value = '';
+    input.focus();
+    input.style.borderColor = 'var(--red)';
+    setTimeout(() => { input.style.borderColor = 'var(--border)'; }, 1500);
+  }
+}
+
+function showDashboard() {
+  document.getElementById('auth-gate').style.display = 'none';
+  document.getElementById('app').style.display = '';
+  initDashboard();
+}
+
+if (sessionStorage.getItem('pi-auth') === '1') {
+  document.addEventListener('DOMContentLoaded', showDashboard);
+} else {
+  document.addEventListener('DOMContentLoaded', () => document.getElementById('auth-input').focus());
+}
+</script>
 
 <script>
 // ── Config ──────────────────────────────────────────────
@@ -903,18 +951,20 @@ document.addEventListener('keydown', e => {
 // ── Init ────────────────────────────────────────────────
 if (localStorage.getItem('pm-theme') === 'light') document.documentElement.classList.add('light');
 
-// Countdown timer
-setInterval(() => {
-  state.countdown = Math.max(0, state.countdown - 1);
-  const el = document.getElementById('countdown-text');
-  if (el) el.textContent = `Refresh in ${state.countdown}s`;
-}, 1000);
+function initDashboard() {
+  // Countdown timer
+  setInterval(() => {
+    state.countdown = Math.max(0, state.countdown - 1);
+    const el = document.getElementById('countdown-text');
+    if (el) el.textContent = `Refresh in ${state.countdown}s`;
+  }, 1000);
 
-// Auto-refresh every 60s
-setInterval(fetchData, 60000);
+  // Auto-refresh every 60s
+  setInterval(fetchData, 60000);
 
-// Initial load
-fetchData();
+  // Initial load
+  fetchData();
+}
 </script>
 </body>
 </html>
