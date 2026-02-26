@@ -61,8 +61,22 @@ function processEvents(events) {
       const vol = m.volumeNum||parseFloat(m.volume)||0;
       const vol24 = m.volume24hr||0;
       const liq = m.liquidityNum||parseFloat(m.liquidity)||0;
-      const oddsFactor = 1 - Math.abs(yes - 0.5)*2;
-      const edge = ((oddsFactor*0.3)+(Math.log10(Math.max(vol24,1))/7*0.4)+(Math.log10(Math.max(liq,1))/7*0.3))*100;
+      // Hard quality gates
+      if (liq < 10000) continue;
+      if (vol24 < 1000) continue;
+      if (yes <= 0.05 || yes >= 0.95) continue;
+
+      // Research-backed curation score
+      const change1d = m.oneDayPriceChange ?? null;
+      const probDeviation = 1 - Math.abs(yes - 0.5) * 2;
+      const liqNorm = Math.min(Math.log10(liq / 10000) / 4, 1);
+      const volNorm = Math.min(Math.log10(Math.max(vol24, 1)) / 6, 1);
+      const daysLeft = (m.endDate||ev.endDate) ? Math.max(0, (new Date(m.endDate||ev.endDate) - Date.now()) / 86400000) : 30;
+      const timePressure = daysLeft <= 1 ? 0.5 : daysLeft <= 14 ? 1 : daysLeft <= 30 ? 0.7 : daysLeft <= 60 ? 0.4 : 0.1;
+      const edge = Math.round(((probDeviation*0.30)+(liqNorm*0.30)+(volNorm*0.20)+(timePressure*0.20))*1000)/10;
+      const newsLag = (change1d !== null && Math.abs(change1d) < 0.005 && daysLeft < 3) ? 'HIGH' :
+                      (change1d !== null && Math.abs(change1d) < 0.02 && daysLeft < 7) ? 'MEDIUM' : 'LOW';
+
       markets.push({
         id:m.id, eventId:ev.id, eventTitle:ev.title, eventSlug:ev.slug,
         question:m.groupItemTitle||m.question||ev.title, slug:m.slug,
@@ -71,13 +85,13 @@ function processEvents(events) {
         outcomes:parseJsonStr(m.outcomes)||['Yes','No'], prices, yesPrice:yes, noPrice:no,
         volume:vol, volume24hr:vol24, volume24hrFmt:formatUSD(vol24),
         volume1wk:m.volume1wk||0, liquidity:liq, liquidityFmt:formatUSD(liq),
-        endDate:m.endDate||ev.endDate,
+        endDate:m.endDate||ev.endDate, daysLeft:Math.round(daysLeft*10)/10,
         lastTradePrice:m.lastTradePrice||yes, bestBid:m.bestBid||0, bestAsk:m.bestAsk||0, spread:m.spread||0,
-        priceChange1d:m.oneDayPriceChange??null, priceChange1w:m.oneWeekPriceChange??null, priceChange1m:m.oneMonthPriceChange??null,
+        priceChange1d:change1d, priceChange1w:m.oneWeekPriceChange??null, priceChange1m:m.oneMonthPriceChange??null,
         image:m.image||m.icon||ev.image||ev.icon||'',
         competitive:m.competitive||0,
         polymarketUrl:`https://polymarket.com/event/${ev.slug}`,
-        volumeRatio:vol>0?vol24/vol:0, edge:Math.round(edge*10)/10,
+        volumeRatio:vol>0?vol24/vol:0, edge, newsLag,
       });
     }
   }
@@ -85,14 +99,14 @@ function processEvents(events) {
 }
 
 function categorizeColumns(markets) {
-  const now = Date.now(), h48 = 48*3600*1000;
+  const now = Date.now();
   return {
-    dontMiss: markets.filter(m=>m.yesPrice>=0.55&&m.yesPrice<=0.85&&m.volume24hr>10000&&m.liquidity>20000).sort((a,b)=>b.volume24hr-a.volume24hr).slice(0,25),
-    highRisk: markets.filter(m=>(m.yesPrice>=0.35&&m.yesPrice<=0.55)||m.liquidity<20000).filter(m=>m.volume24hr>1000).sort((a,b)=>b.volume24hr-a.volume24hr).slice(0,25),
-    safePlays: markets.filter(m=>(m.yesPrice>0.85||m.yesPrice<0.15)&&m.volume24hr>10000).sort((a,b)=>b.volume24hr-a.volume24hr).slice(0,25),
-    closingSoon: markets.filter(m=>{const e=new Date(m.endDate).getTime();return e>now&&e-now<=h48;}).sort((a,b)=>new Date(a.endDate)-new Date(b.endDate)).slice(0,25),
-    trending: markets.filter(m=>m.priceChange1d!==null&&Math.abs(m.priceChange1d)>0.005).sort((a,b)=>Math.abs(b.priceChange1d)-Math.abs(a.priceChange1d)).slice(0,25),
-    whales: markets.filter(m=>m.volumeRatio>0.02&&m.volume24hr>5000).sort((a,b)=>b.volumeRatio-a.volumeRatio).slice(0,25),
+    dontMiss: markets.filter(m=>m.yesPrice>=0.20&&m.yesPrice<=0.80&&m.liquidity>=25000&&m.volume24hr>=5000&&m.daysLeft<=30).sort((a,b)=>b.edge-a.edge).slice(0,20),
+    highRisk: markets.filter(m=>m.yesPrice>=0.35&&m.yesPrice<=0.65&&m.volume24hr>=2000&&m.liquidity>=15000).sort((a,b)=>b.volume24hr-a.volume24hr).slice(0,20),
+    safePlays: markets.filter(m=>(m.yesPrice>0.75||m.yesPrice<0.25)&&m.liquidity>=20000&&m.volume24hr>=3000&&m.daysLeft<=21).sort((a,b)=>b.volume24hr-a.volume24hr).slice(0,20),
+    closingSoon: markets.filter(m=>{const e=new Date(m.endDate).getTime();return e>now&&(e-now)<=172800000;}).filter(m=>m.liquidity>=10000).sort((a,b)=>new Date(a.endDate)-new Date(b.endDate)).slice(0,20),
+    trending: markets.filter(m=>m.priceChange1d!==null&&Math.abs(m.priceChange1d)>0.02&&m.volume24hr>=3000).sort((a,b)=>Math.abs(b.priceChange1d)-Math.abs(a.priceChange1d)).slice(0,20),
+    newsLag: markets.filter(m=>(m.newsLag==='HIGH'||m.newsLag==='MEDIUM')&&m.liquidity>=15000).sort((a,b)=>a.daysLeft-b.daysLeft).slice(0,20),
   };
 }
 
