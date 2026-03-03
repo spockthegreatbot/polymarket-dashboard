@@ -1,4 +1,6 @@
 const fetch = require('node-fetch');
+const { fetchNewsSignals } = require('./news');
+const { fetchSmartMoneySignals } = require('./smartmoney');
 
 const GAMMA_BASE = 'https://gamma-api.polymarket.com';
 let cache = { markets: null, columns: null, stats: null, ts: 0, refreshing: null };
@@ -90,8 +92,11 @@ function processEvents(events) {
         priceChange1d:change1d, priceChange1w:m.oneWeekPriceChange??null, priceChange1m:m.oneMonthPriceChange??null,
         image:m.image||m.icon||ev.image||ev.icon||'',
         competitive:m.competitive||0,
+        conditionId:m.conditionId||'',
+        clobTokenIds:parseJsonStr(m.clobTokenIds)||[],
         polymarketUrl:`https://polymarket.com/event/${ev.slug}`,
         volumeRatio:vol>0?vol24/vol:0, edge, newsLag,
+        newsSignal: null, smartMoneySignal: null,
       });
     }
   }
@@ -101,12 +106,18 @@ function processEvents(events) {
 function categorizeColumns(markets) {
   const now = Date.now();
   return {
-    dontMiss: markets.filter(m=>m.yesPrice>=0.20&&m.yesPrice<=0.80&&m.liquidity>=25000&&m.volume24hr>=5000&&m.daysLeft<=30).sort((a,b)=>b.edge-a.edge).slice(0,20),
-    highRisk: markets.filter(m=>m.yesPrice>=0.35&&m.yesPrice<=0.65&&m.volume24hr>=2000&&m.liquidity>=15000).sort((a,b)=>b.volume24hr-a.volume24hr).slice(0,20),
-    safePlays: markets.filter(m=>(m.yesPrice>0.75||m.yesPrice<0.25)&&m.liquidity>=20000&&m.volume24hr>=3000&&m.daysLeft<=21).sort((a,b)=>b.volume24hr-a.volume24hr).slice(0,20),
-    closingSoon: markets.filter(m=>{const e=new Date(m.endDate).getTime();return e>now&&(e-now)<=172800000;}).filter(m=>m.liquidity>=10000).sort((a,b)=>new Date(a.endDate)-new Date(b.endDate)).slice(0,20),
-    trending: markets.filter(m=>m.priceChange1d!==null&&Math.abs(m.priceChange1d)>0.02&&m.volume24hr>=3000).sort((a,b)=>Math.abs(b.priceChange1d)-Math.abs(a.priceChange1d)).slice(0,20),
-    newsLag: markets.filter(m=>(m.newsLag==='HIGH'||m.newsLag==='MEDIUM')&&m.liquidity>=15000).sort((a,b)=>a.daysLeft-b.daysLeft).slice(0,20),
+    bestBets: markets.filter(m=>m.liquidity>=20000&&m.volume24hr>=3000&&m.daysLeft<=30).map(m=>{
+      const vol24Norm = Math.min(Math.log10(Math.max(m.volume24hr,1))/6,1);
+      const timePressure = m.daysLeft<=1?0.5:m.daysLeft<=14?1:m.daysLeft<=30?0.7:0.4;
+      const newsBoost = m.newsSignal?.opportunity ? 0.2 : 0;
+      const smBoost = m.smartMoneySignal?.alert ? 0.1 : 0;
+      const score = (m.edge/100)*0.4 + vol24Norm*0.3 + timePressure*0.2 + newsBoost + smBoost;
+      return {...m, _score: score};
+    }).sort((a,b)=>b._score-a._score).slice(0,10),
+    newsEdge: markets.filter(m=>m.newsSignal?.opportunity===true).sort((a,b)=>(b.newsSignal?.confidence||0)-(a.newsSignal?.confidence||0)).slice(0,15),
+    smartMoney: markets.filter(m=>m.smartMoneySignal?.alert===true).sort((a,b)=>(b.smartMoneySignal?.largestTrade?.size||0)-(a.smartMoneySignal?.largestTrade?.size||0)).slice(0,15),
+    closingSoon: markets.filter(m=>{const e=new Date(m.endDate).getTime();return e>now&&(e-now)<=172800000;}).filter(m=>m.liquidity>=10000).sort((a,b)=>new Date(a.endDate)-new Date(b.endDate)).slice(0,15),
+    momentum: markets.filter(m=>m.priceChange1d!==null&&Math.abs(m.priceChange1d)>0.03&&m.volume24hr>=3000).sort((a,b)=>Math.abs(b.priceChange1d)-Math.abs(a.priceChange1d)).slice(0,15),
   };
 }
 
@@ -116,6 +127,17 @@ async function getData() {
   const p = (async () => {
     const events = await fetchAllEvents();
     const markets = processEvents(events);
+
+    // Enrich with news + smart money signals (non-blocking)
+    const [newsMap, smMap] = await Promise.all([
+      fetchNewsSignals(markets).catch(() => new Map()),
+      fetchSmartMoneySignals(markets).catch(() => new Map()),
+    ]);
+    for (const m of markets) {
+      m.newsSignal = newsMap.get(m.id) || null;
+      m.smartMoneySignal = smMap.get(m.id) || null;
+    }
+
     const columns = categorizeColumns(markets);
     const now = Date.now(), eod = new Date(); eod.setHours(23,59,59,999);
     cache = {
@@ -127,6 +149,8 @@ async function getData() {
         closingToday:markets.filter(m=>{const e=new Date(m.endDate).getTime();return e>now&&e<=eod.getTime();}).length,
         totalEvents:events.length, lastRefresh:new Date().toISOString(),
         columnCounts:Object.fromEntries(Object.entries(columns).map(([k,v])=>[k,v.length])),
+        newsOpportunities: columns.newsEdge.length,
+        smartMoneyAlerts: columns.smartMoney.length,
       },
       ts:Date.now(), refreshing:null
     };

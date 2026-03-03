@@ -515,12 +515,11 @@ const CAT_ICONS = { All:'🌐', Politics:'🏛️', Sports:'⚽', Crypto:'₿', 
 const SORT_OPTIONS = { volume24hr:'24h Volume', endDate:'End Date', liquidity:'Liquidity', edge:'Edge Score', newest:'Newest' };
 
 const COLUMN_CONFIG = [
-  { key:'dontMiss', title:"Don't Miss", emoji:'🔥', desc:'High conviction, high volume', color:'var(--red)' },
-  { key:'highRisk', title:'High Risk High Reward', emoji:'⚡', desc:'Near 50/50 or thin liquidity', color:'var(--purple)' },
-  { key:'safePlays', title:'Safe Plays', emoji:'📊', desc:'High probability, consistent returns', color:'var(--green)' },
-  { key:'closingSoon', title:'Closing Soon', emoji:'⏰', desc:'Ending within 48 hours', color:'var(--orange)' },
-  { key:'trending', title:'Trending', emoji:'👀', desc:'Biggest price moves in 24h', color:'var(--blue)' },
-  { key:'newsLag', title:'News Lag', emoji:'📰', desc:'Stale prices near resolution — potential mispricing', color:'var(--red)' },
+  { key:'bestBets', title:'Best Bets', emoji:'🎯', desc:'Top 10 — highest combined score', color:'var(--red)' },
+  { key:'newsEdge', title:'News Edge', emoji:'📰', desc:'News contradicts current price — act fast', color:'var(--purple)' },
+  { key:'smartMoney', title:'Smart Money', emoji:'🐋', desc:'Large trades in last 4h — follow the whales', color:'var(--green)' },
+  { key:'closingSoon', title:'Closing Soon', emoji:'⚡', desc:'Ending within 48 hours', color:'var(--orange)' },
+  { key:'momentum', title:'Momentum', emoji:'📈', desc:'Price moved 3%+ today — something changed', color:'var(--blue)' },
 ];
 
 // ── Helpers ─────────────────────────────────────────────
@@ -747,8 +746,9 @@ function getFilteredColumns() {
   // If we have search results from server, show those
   if (state.search && state.search.length >= 2 && state.searchResults) {
     return {
-      dontMiss: state.searchResults.slice(0, 50),
-      highRisk: [], safePlays: [], closingSoon: [], trending: [], newsLag: []
+      _searchMode: true,
+      bestBets: state.searchResults.slice(0, 50),
+      newsEdge: [], smartMoney: [], closingSoon: [], momentum: []
     };
   }
 
@@ -768,10 +768,10 @@ function getFilteredColumns() {
 
 function renderColumns() {
   const cols = getFilteredColumns();
-  const isFiltered = state.search || state.category !== 'All';
 
-  if (isFiltered) {
-    const markets = cols.dontMiss || [];
+  // Search mode — full-width grid
+  if (cols._searchMode) {
+    const markets = cols.bestBets || [];
     return `<div class="column" style="width:100%;flex-shrink:1">
       <div class="column-header">
         <div class="column-title">
@@ -779,35 +779,46 @@ function renderColumns() {
           <h3>Search Results</h3>
           <span class="col-count" style="background:var(--accent-dim);color:var(--accent)">${markets.length}</span>
         </div>
-        <div class="column-desc">${state.search ? `"${esc(state.search)}"` : ''} ${state.category !== 'All' ? state.category : ''}</div>
+        <div class="column-desc">Results for "${esc(state.search)}"</div>
       </div>
       <div class="column-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:8px;max-height:none;overflow:visible">
         ${markets.map(m => renderCard(m)).join('')}
-        ${markets.length === 0 ? '<div style="padding:40px;text-align:center;color:var(--text-muted)">No markets match your filters</div>' : ''}
+        ${markets.length === 0 ? '<div style="padding:40px;text-align:center;color:var(--text-muted)">No markets found for "'+esc(state.search)+'"</div>' : ''}
       </div>
     </div>`;
   }
 
-  return COLUMN_CONFIG.map(cfg => {
-    const markets = cols[cfg.key] || [];
-    return `<div class="column">
-      <div class="column-header">
-        <div class="column-title">
-          <span class="emoji">${cfg.emoji}</span>
-          <h3>${cfg.title}</h3>
-          <span class="col-count" style="background:${cfg.color}22;color:${cfg.color}">${markets.length}</span>
-        </div>
-        <div class="column-desc">${cfg.desc}</div>
-      </div>
-      <div class="column-cards">
-        ${markets.map((m,i) => renderCard(m, i)).join('')}
-        ${markets.length === 0 ? '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">No markets match</div>' : ''}
-      </div>
-    </div>`;
-  }).join('');
+  // Category filter mode — filter all columns
+  if (state.category !== 'All') {
+    const filtered = {};
+    for (const [key, markets] of Object.entries(cols)) {
+      if (key.startsWith('_')) continue;
+      filtered[key] = (markets || []).filter(m => m.category === state.category);
+    }
+    return COLUMN_CONFIG.map(cfg => renderColumnBlock(cfg, filtered[cfg.key] || [])).join('');
+  }
+
+  return COLUMN_CONFIG.map(cfg => renderColumnBlock(cfg, cols[cfg.key] || [])).join('');
 }
 
-function renderCard(m, idx=0) {
+function renderColumnBlock(cfg, markets) {
+  return `<div class="column">
+    <div class="column-header">
+      <div class="column-title">
+        <span class="emoji">${cfg.emoji}</span>
+        <h3>${cfg.title}</h3>
+        <span class="col-count" style="background:${cfg.color}22;color:${cfg.color}">${markets.length}</span>
+      </div>
+      <div class="column-desc">${cfg.desc}</div>
+    </div>
+    <div class="column-cards">
+      ${markets.map((m,i) => renderCard(m, i, cfg.key)).join('')}
+      ${markets.length === 0 ? '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">No markets match</div>' : ''}
+    </div>
+  </div>`;
+}
+
+function renderCard(m, idx=0, colKey='') {
   const urg = urgency(m.endDate);
   const change = m.priceChange1d;
   const changeAbs = change ? Math.abs(change) : 0;
@@ -816,6 +827,34 @@ function renderCard(m, idx=0) {
   const queued = state.traderQueue.some(q => q.id === m.id);
   const yesColor = m.yesPrice >= 0.5 ? 'var(--green)' : 'var(--red)';
   const barGrad = m.yesPrice > 0.7 ? 'var(--green)' : m.yesPrice > 0.4 ? 'var(--yellow)' : 'var(--red)';
+
+  // News signal badge
+  let newsBadge = '';
+  if (m.newsSignal && m.newsSignal.lean !== 'NEUTRAL') {
+    const isYes = m.newsSignal.lean === 'YES';
+    const bg = isYes ? 'var(--green-dim,rgba(34,197,94,.15))' : 'var(--red-dim,rgba(239,68,68,.15))';
+    const col = isYes ? 'var(--green)' : 'var(--red)';
+    const label = isYes ? '🟢 NEWS → YES' : '🔴 NEWS → NO';
+    const conf = Math.round((m.newsSignal.confidence||0)*100);
+    const headline = (m.newsSignal.headline||'').slice(0,72) + ((m.newsSignal.headline||'').length>72?'…':'');
+    newsBadge = `<div style="margin:6px 0;padding:6px 8px;border-radius:6px;background:${bg};border:1px solid ${col}33">
+      <div style="font-size:9px;font-weight:700;color:${col};margin-bottom:2px">${label} · ${conf}% confidence</div>
+      <div style="font-size:10px;color:var(--text-muted);line-height:1.3">${esc(headline)}</div>
+      ${m.newsSignal.source ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px">— ${esc(m.newsSignal.source)}</div>` : ''}
+    </div>`;
+  }
+
+  // Smart money badge
+  let smBadge = '';
+  if (m.smartMoneySignal?.largestTrade) {
+    const t = m.smartMoneySignal.largestTrade;
+    const col = t.side === 'YES' ? 'var(--green)' : 'var(--red)';
+    const total = m.smartMoneySignal.total4h || 0;
+    smBadge = `<div style="margin:6px 0;padding:6px 8px;border-radius:6px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3)">
+      <div style="font-size:9px;font-weight:700;color:${col}">🐋 $${t.size.toLocaleString()} ${t.side}ED at ${Math.round((t.price||0)*100)}%</div>
+      <div style="font-size:9px;color:var(--text-muted)">${t.timeAgo} · $${total.toLocaleString()} total 4h whale volume</div>
+    </div>`;
+  }
 
   return `<div class="card" style="animation-delay:${idx*30}ms" onclick="openModal('${m.id}')">
     <div class="card-cat">
@@ -830,15 +869,14 @@ function renderCard(m, idx=0) {
     </div>
     <div class="prob-bar"><div class="prob-bar-fill" style="width:${m.yesPrice*100}%;background:linear-gradient(90deg,${yesColor},${barGrad})"></div></div>
     <div class="prob-labels"><span>YES ${formatPct(m.yesPrice)}</span><span>NO ${formatPct(m.noPrice)}</span></div>
+    ${newsBadge}
+    ${smBadge}
     <div class="card-stats" style="grid-template-columns:1fr 1fr 1fr 1fr">
       <div class="card-stat"><div class="card-stat-label">24h Vol</div><div class="card-stat-value">${m.volume24hrFmt || formatUSD(m.volume24hr)}</div></div>
       <div class="card-stat"><div class="card-stat-label">Liquidity</div><div class="card-stat-value">${m.liquidityFmt || formatUSD(m.liquidity)}</div></div>
       <div class="card-stat"><div class="card-stat-label">Ends</div><div class="card-stat-value" ${urg==='urgent'?'style="color:var(--red)"':urg==='soon'?'style="color:var(--orange)"':''}>${countdown(m.endDate)}</div></div>
       <div class="card-stat"><div class="card-stat-label">Edge</div><div class="card-stat-value" style="color:${(m.edge||0)>=70?'var(--green)':(m.edge||0)>=40?'var(--yellow)':'var(--red)'}">${(m.edge||0)>=70?'🟢':(m.edge||0)>=40?'🟡':'🔴'} ${m.edge||0}</div></div>
     </div>
-    ${m.newsLag==='HIGH'?`<div style="margin:4px 0 6px;padding:3px 8px;border-radius:6px;background:var(--red-dim);color:var(--red);font-size:9px;font-weight:700;display:inline-flex;align-items:center;gap:3px">📰 NEWS LAG</div>`:''}
-    ${m.newsLag==='MEDIUM'?`<div style="margin:4px 0 6px;padding:3px 8px;border-radius:6px;background:var(--yellow-dim);color:var(--yellow);font-size:9px;font-weight:700;display:inline-flex;align-items:center;gap:3px">⚠️ SLOW PRICE MOVE</div>`:''}
-
     <div class="card-actions">
       <button class="card-action-btn ${watched?'watched':''}" onclick="event.stopPropagation();toggleWatch('${m.id}')" title="${watched?'Remove from watchlist':'Add to watchlist'}">${watched?icons.starFill:icons.star}</button>
       <button class="card-action-btn ${queued?'queued':''}" onclick="event.stopPropagation();sendToTraderById('${m.id}')" title="${queued?'In trader queue':'Send to Trader'}">${icons.send}</button>

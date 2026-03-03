@@ -153,12 +153,16 @@ function processEvents(events) {
         priceChange1m: m.oneMonthPriceChange ?? null,
         image: m.image || m.icon || ev.image || ev.icon || '',
         competitive: m.competitive || 0,
+        conditionId: m.conditionId || '',
+        clobTokenIds: (() => { try { return JSON.parse(m.clobTokenIds || '[]'); } catch { return []; } })(),
         polymarketUrl: `https://polymarket.com/event/${ev.slug}`,
         volumeRatio: vol > 0 ? vol24 / vol : 0,
         edge,
         newsLag,
         daysLeft: Math.round(daysLeft * 10) / 10,
         acceptingOrders: m.acceptingOrders ?? true,
+        newsSignal: null,
+        smartMoneySignal: null,
       });
     }
   }
@@ -168,54 +172,47 @@ function processEvents(events) {
 function categorizeColumns(markets) {
   const now = Date.now();
 
-  // Don't Miss: High conviction — price in 20-80% range, strong liquidity, active volume, resolves ≤30 days
-  const dontMiss = markets
-    .filter(m => m.yesPrice >= 0.20 && m.yesPrice <= 0.80)
-    .filter(m => m.liquidity >= 25000)
-    .filter(m => m.volume24hr >= 5000)
-    .filter(m => m.daysLeft <= 30)
-    .sort((a, b) => b.edge - a.edge)
-    .slice(0, 20);
+  // 🎯 Best Bets: Top 10 by combined score
+  const bestBets = markets
+    .filter(m => m.liquidity >= 20000 && m.volume24hr >= 3000 && m.daysLeft <= 30)
+    .map(m => {
+      const vol24Norm = Math.min(Math.log10(Math.max(m.volume24hr, 1)) / 6, 1);
+      const timePressure = m.daysLeft <= 1 ? 0.5 : m.daysLeft <= 14 ? 1 : m.daysLeft <= 30 ? 0.7 : 0.4;
+      const newsBoost = m.newsSignal?.opportunity ? 0.2 : 0;
+      const smBoost = m.smartMoneySignal?.alert ? 0.1 : 0;
+      const score = (m.edge / 100) * 0.4 + vol24Norm * 0.3 + timePressure * 0.2 + newsBoost + smBoost;
+      return { ...m, _score: score };
+    })
+    .sort((a, b) => b._score - a._score)
+    .slice(0, 10);
 
-  // High Risk High Reward: Near 50/50 but with real volume (genuine uncertainty)
-  const highRisk = markets
-    .filter(m => m.yesPrice >= 0.35 && m.yesPrice <= 0.65)
-    .filter(m => m.volume24hr >= 2000)
-    .filter(m => m.liquidity >= 15000)
-    .sort((a, b) => b.volume24hr - a.volume24hr)
-    .slice(0, 20);
+  // 📰 News Edge: News contradicts current price
+  const newsEdge = markets
+    .filter(m => m.newsSignal?.opportunity === true)
+    .sort((a, b) => (b.newsSignal?.confidence || 0) - (a.newsSignal?.confidence || 0))
+    .slice(0, 15);
 
-  // Safe Plays: High probability (>75% or <25%) with real liquidity — low risk yield
-  const safePlays = markets
-    .filter(m => (m.yesPrice > 0.75 || m.yesPrice < 0.25))
-    .filter(m => m.liquidity >= 20000)
-    .filter(m => m.volume24hr >= 3000)
-    .filter(m => m.daysLeft <= 21)
-    .sort((a, b) => b.volume24hr - a.volume24hr)
-    .slice(0, 20);
+  // 🐋 Smart Money: Large trades in last 4h
+  const smartMoney = markets
+    .filter(m => m.smartMoneySignal?.alert === true)
+    .sort((a, b) => (b.smartMoneySignal?.largestTrade?.size || 0) - (a.smartMoneySignal?.largestTrade?.size || 0))
+    .slice(0, 15);
 
-  // Closing Soon: Resolving in ≤48h with meaningful liquidity (yield play)
+  // ⚡ Closing Soon: Resolving in ≤48h
   const closingSoon = markets
     .filter(m => { const e = new Date(m.endDate).getTime(); return e > now && (e - now) <= 172800000; })
     .filter(m => m.liquidity >= 10000)
     .sort((a, b) => new Date(a.endDate) - new Date(b.endDate))
-    .slice(0, 20);
+    .slice(0, 15);
 
-  // Trending: Biggest price moves with real volume (news-driven)
-  const trending = markets
-    .filter(m => m.priceChange1d !== null && Math.abs(m.priceChange1d) > 0.02)
+  // 📈 Momentum: Price moved 3%+ today
+  const momentum = markets
+    .filter(m => m.priceChange1d !== null && Math.abs(m.priceChange1d) > 0.03)
     .filter(m => m.volume24hr >= 3000)
     .sort((a, b) => Math.abs(b.priceChange1d) - Math.abs(a.priceChange1d))
-    .slice(0, 20);
+    .slice(0, 15);
 
-  // News Lag: Stale prices near resolution — highest opportunity
-  const newsLag = markets
-    .filter(m => m.newsLag === 'HIGH' || m.newsLag === 'MEDIUM')
-    .filter(m => m.liquidity >= 15000)
-    .sort((a, b) => a.daysLeft - b.daysLeft)
-    .slice(0, 20);
-
-  return { dontMiss, highRisk, safePlays, closingSoon, trending, newsLag };
+  return { bestBets, newsEdge, smartMoney, closingSoon, momentum };
 }
 
 async function refreshCache() {
@@ -230,6 +227,19 @@ async function refreshCache() {
     console.log(`[${new Date().toISOString()}] Refreshing cache...`);
     const events = await fetchAllEvents();
     const markets = processEvents(events);
+
+    // Enrich with news + smart money (non-blocking)
+    const { fetchNewsSignals } = require('./api/news');
+    const { fetchSmartMoneySignals } = require('./api/smartmoney');
+    const [newsMap, smMap] = await Promise.all([
+      fetchNewsSignals(markets).catch(() => new Map()),
+      fetchSmartMoneySignals(markets).catch(() => new Map()),
+    ]);
+    for (const m of markets) {
+      m.newsSignal = newsMap.get(m.id) || null;
+      m.smartMoneySignal = smMap.get(m.id) || null;
+    }
+
     const columns = categorizeColumns(markets);
     const now = Date.now();
     const eod = new Date(); eod.setHours(23, 59, 59, 999);
@@ -241,13 +251,14 @@ async function refreshCache() {
       closingToday: markets.filter(m => { const e = new Date(m.endDate).getTime(); return e > now && e <= eod.getTime(); }).length,
       totalEvents: events.length,
       lastRefresh: new Date().toISOString(),
+      newsOpportunities: columns.newsEdge.length,
+      smartMoneyAlerts: columns.smartMoney.length,
       columnCounts: {
-        dontMiss: columns.dontMiss.length,
-        highRisk: columns.highRisk.length,
-        safePlays: columns.safePlays.length,
+        bestBets: columns.bestBets.length,
+        newsEdge: columns.newsEdge.length,
+        smartMoney: columns.smartMoney.length,
         closingSoon: columns.closingSoon.length,
-        trending: columns.trending.length,
-        newsLag: columns.newsLag.length,
+        momentum: columns.momentum.length,
       },
     };
 
